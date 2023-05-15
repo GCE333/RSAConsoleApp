@@ -33,11 +33,7 @@ namespace RSAConsoleApp
                 }
                 if (key == 'G') rsaKeys = RSAKeyGenerator.GenerateKeys(KeySizePrompt(usePadding));
                 else if (key == 'I') rsaKeys = KeyImportPrompt(usePadding, isDecryption);
-                else if (key == 'C')
-                {
-                    Console.WriteLine("Calculating the values of RSA keys is not implemented yet.");
-                    continue;
-                }
+                else if (key == 'C') rsaKeys = CalculatePrompt(usePadding);
 
                 if (isDecryption)
                 {
@@ -170,6 +166,52 @@ namespace RSAConsoleApp
             }
             while (isValid == false);
             return new RSAKeyComponents(n, e, d);
+        }
+
+        static public RSAKeyComponents CalculatePrompt(bool usePadding)
+        {
+            while (true)
+            {
+                BigInteger p;
+                BigInteger q;
+                BigInteger e;
+                string prompt = "Choose a format for entering p, q, and e values. [H]ex/[N]umber: ";
+                char key = ConsolePrompt(prompt, new char[] { 'H', 'N' });
+                SupportedFormats format = (SupportedFormats)key;
+                bool isValid;
+                do
+                {
+                    p = ParseToBigInteger("Enter RSA prime p: ", format);
+                    isValid = p >= 2 || (usePadding && p.GetByteCount(true) >= 6);
+                    if (!isValid) Console.WriteLine("Given value is too small. Please try again.");
+                }
+                while (isValid == false);
+
+                do
+                {
+                    q = ParseToBigInteger("Enter RSA prime q: ", format);
+                    isValid = q >= 2 || (usePadding && p.GetByteCount(true) >= 6);
+                    if (!isValid) Console.WriteLine("Given value is too small. Please try again.");
+                }
+                while (isValid == false);
+
+                do
+                {
+                    e = ParseToBigInteger("RSA public exponent e: ", format);
+                    isValid = e > 1 && !e.IsEven;
+                    if (!isValid) Console.WriteLine("RSA exponent e must be an odd number greater than 1.");
+                }
+                while (isValid == false);
+
+                try
+                {
+                    return RSAKeyGenerator.CalculateKeys(p, q, e);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("ERROR: " + ex.Message);
+                }
+            }
         }
 
         static public BigInteger ParseToBigInteger(string prompt, SupportedFormats format)

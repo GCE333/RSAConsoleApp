@@ -151,5 +151,35 @@ namespace RSAConsoleApp
             Console.WriteLine("RSA keys generated in {0} ms", stopwatch.Elapsed.TotalMilliseconds);
             return new RSAKeyComponents(n, e, d);
         }
+
+        static public RSAKeyComponents CalculateKeys(BigInteger p, BigInteger q, BigInteger e)
+        {
+            Stopwatch stopwatch = new Stopwatch();
+            stopwatch.Start();
+
+            if (!IsProbablyPrime(p, 20)) throw new ArgumentException("p is not prime");
+            if (!IsProbablyPrime(q, 20)) throw new ArgumentException("q is not prime");
+
+            // Calculate n = pq
+            BigInteger n = p * q;
+
+            // Calculate phi(n) = (p - 1)(q - 1)
+            BigInteger phiN = (p - 1) * (q - 1);
+
+            if (CalculateGCD(e, phiN) != 1) throw new ArgumentException("e and phiN are not coprime");
+
+            // Calculate the modular inverse of e mod phi(n), which is d
+            BigInteger d = ModularInverse(e, phiN);
+            stopwatch.Stop();
+
+            Console.WriteLine("p: " + p);
+            Console.WriteLine("q: " + q);
+            Console.WriteLine("n: " + n);
+            Console.WriteLine("phiN: " + phiN);
+            Console.WriteLine("e: " + e);
+            Console.WriteLine("d: " + d);
+            Console.WriteLine("RSA keys calculated in {0} ms", stopwatch.Elapsed.TotalMilliseconds);
+            return new RSAKeyComponents(n, e, d);
+        }
     }
 }
