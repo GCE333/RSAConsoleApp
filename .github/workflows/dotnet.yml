@@ -6,23 +6,91 @@ name: .NET
 on:
   push:
     branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
 
 jobs:
-  build:
-
+  check:
     runs-on: ubuntu-latest
-
+    outputs:
+      # Pass the release ID to the subsequent job.
+      # This will be EMPTY if the release already exists.
+      release_id: ${{ steps.create_release.outputs.id }}
+    permissions:
+      contents: write # Needed to create a release
     steps:
-    - uses: actions/checkout@v4
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 6.0.x
-    - name: Restore dependencies
-      run: dotnet restore
-    - name: Build
-      run: dotnet build --no-restore
-    - name: Test
-      run: dotnet test --no-build --verbosity normal
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get project version
+        id: get_version
+        run: echo "version=$(grep -oP '(?<=<Version>).*(?=</Version>)' ${{ github.event.repository.name }}.csproj)" >> $GITHUB_OUTPUT
+
+      - name: Create Release if it does not exist
+        id: create_release
+        if: steps.get_version.outputs.version # Only run if a version is found
+        uses: ncipollo/release-action@v1
+        with:
+          tag: v${{ steps.get_version.outputs.version }}
+          name: Release v${{ steps.get_version.outputs.version }}
+          draft: true  # Keep as draft until artifacts are uploaded
+          prerelease: false
+          skipIfReleaseExists: true
+
+  build:
+    needs: check
+    if: ${{ needs.check.outputs.release_id }} # Only run if a new release was created
+    runs-on: ${{ matrix.os }}
+    outputs:
+      release_id: ${{ needs.check.outputs.release_id }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+            artifact_name: ${{ github.event.repository.name }}
+            asset_name: ${{ github.event.repository.name }}-linux-x64
+          - os: windows-latest
+            rid: win-x64
+            artifact_name: ${{ github.event.repository.name }}.exe
+            asset_name: ${{ github.event.repository.name }}-win-x64.exe
+          - os: macos-latest
+            rid: osx-x64
+            artifact_name: ${{ github.event.repository.name }}
+            asset_name: ${{ github.event.repository.name }}-osx-x64
+
+    permissions:
+      contents: write # Needed to upload release assets
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 6.0.x
+
+      - name: Display .NET SDK Version
+        run: dotnet --version
+
+      - name: Publish single executable
+        run: dotnet publish ${{ github.event.repository.name }}.csproj -c Release --self-contained true -r ${{ matrix.rid }} -p:PublishSingleFile=true -p:PublishTrimmed=true -o ./publish
+
+      - name: Upload release asset
+        uses: svenstaro/upload-release-action@v2
+        with:
+          release_id: ${{ needs.check.outputs.release_id }}
+          file: ./publish/${{ matrix.artifact_name }}
+          asset_name: ${{ matrix.asset_name }}
+          draft: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Needed to publish the release
+    steps:
+      - name: Publish release draft
+        run: gh api -X PATCH repos/${{ github.repository }}/releases/${{ needs.build.outputs.release_id }} -f draft=false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
